@@ -13,6 +13,8 @@ import plotly.graph_objects as go
 
 @dataclass
 class ProcessStep:
+    """Container class for network flow process steps"""
+
     id: int
     send_from_cnt: int
     to_processing_cnt: int
@@ -50,10 +52,12 @@ class NetworkFlowModel:
         self._input_data = input_data
         self._create_encoded_data()
         self._create_process_steps()
+        self._steps_by_process = None
 
     def _create_encoded_data(self):
+        """If necessary, create scaled data from input data."""
         encoded_data = self._input_data.copy()
-        # Check for decimal values
+        # Check for decimal values and convert to integers
         if encoded_data["Amount"].dtype == "float64":
             # Assume that decimal values have two significant digits and make integer values
             self._scale = 10**2
@@ -63,18 +67,10 @@ class NetworkFlowModel:
         else:
             self._scale = 1
 
-        # Convert string values to categorical codes
-        # codes = {}
-        # columns = ["send_from_cnt", "to_processing_cnt", "for_process"]
-        # for column in columns:
-        #     col_values = encoded_data[column]
-        #     col_codes = col_values.astype("category").cat.codes
-        #     codes[column] = dict(zip(col_values, col_codes))
         self._encoded_data = encoded_data
-        # self._codes = codes
 
     def _create_process_steps(self):
-        """Create process steps from input data"""
+        """Create ProcessStep objects from input data"""
         process_steps = []
         data = self._encoded_data
 
@@ -95,21 +91,23 @@ class NetworkFlowModel:
             )
         self._process_steps = process_steps
 
-    def _find_upstream_nodes(
+    def _create_upstream_constraints(
         self,
         model: cp_model.CpModel,
         current_nodes: list[ProcessStep],
         upstream_nodes: list[ProcessStep],
     ):
-        """Find upstream nodes for current process"""
-        # Find upstream nodes
+        """Create constraints for upstream process steps"""
         for n, current_node in enumerate(current_nodes):
             node_is_used = current_node.is_used
             contrib_amounts = []
             for m, up_node in enumerate(upstream_nodes):
+                # Boolean for if upstream node is used by current node
                 up_node_uses_node = model.NewBoolVar(
                     f"up_node_{up_node.id}_uses_node_{current_node.id}"
                 )
+
+                # Amount of upstream node that is used by current node
                 up_node_contrib = model.NewIntVar(
                     0,
                     up_node.amount,
@@ -121,6 +119,7 @@ class NetworkFlowModel:
                     f"up_node_{up_node.id}_allowed_for_node_{current_node.id}"
                 )
 
+                # Check that upstream process occurs before current process
                 model.Add(up_node.week <= current_node.week).OnlyEnforceIf(
                     up_node_allowed
                 )
@@ -128,9 +127,10 @@ class NetworkFlowModel:
                     up_node_allowed.Not()
                 )
 
-                # Set if upstream node is allowed to be used by current node
+                # If upstream process is after current process, it cannot be used
                 model.AddImplication(up_node_allowed.Not(), up_node_uses_node.Not())
 
+                # Set contribution constraints for upstream process into current process
                 model.Add(up_node_contrib >= 0).OnlyEnforceIf(
                     [up_node_uses_node, node_is_used]
                 )
@@ -138,10 +138,12 @@ class NetworkFlowModel:
                     [up_node_uses_node.Not(), node_is_used]
                 )
 
+                # Collect contribution amounts and save use booleans to ProcessStep for up_node
                 contrib_amounts.append(up_node_contrib)
                 up_node.is_used_by_node[current_node.id] = up_node_uses_node
                 up_node.contrib_amounts[current_node.id] = up_node_contrib
 
+            # Require process amount to equal all upstream contributions
             model.Add(current_node.amount == sum(contrib_amounts)).OnlyEnforceIf(
                 node_is_used
             )
@@ -149,8 +151,10 @@ class NetworkFlowModel:
         for node in upstream_nodes:
             contrib_amounts = list(node.contrib_amounts.values())
             used_by_values = list(node.is_used_by_node.values())
+            # Node is_used if any current nodes use it
             model.Add(sum(used_by_values) > 0).OnlyEnforceIf(node.is_used)
             model.Add(sum(used_by_values) == 0).OnlyEnforceIf(node.is_used.Not())
+            # Upstream nodes cannot contribute more than their amount
             model.Add(node.amount >= sum(contrib_amounts))
 
     def solve(self):
@@ -160,7 +164,7 @@ class NetworkFlowModel:
 
         model = cp_model.CpModel()
 
-        # Initialize step is_used and sort steps
+        # Initialize is_used and sort steps into process
         for step in self._process_steps:
             if step.for_process == self.PROCESS_FLOW[-1]:
                 step.is_used = 1
@@ -174,7 +178,7 @@ class NetworkFlowModel:
         for n in range(len(self.PROCESS_FLOW) - 1, 0, -1):
             current_nodes = processes[self.PROCESS_FLOW[n]]
             upstream_nodes = processes[self.PROCESS_FLOW[n - 1]]
-            self._find_upstream_nodes(model, current_nodes, upstream_nodes)
+            self._create_upstream_constraints(model, current_nodes, upstream_nodes)
 
         # Minimize number of node uses to require simplified network flows
         num_used = []
@@ -184,8 +188,7 @@ class NetworkFlowModel:
         model.Minimize(sum(num_used))
 
         solver = cp_model.CpSolver()
-        # solver.parameters.enumerate_all_solutions = True
-        sol = solver.Solve(model)
+        solver_status = solver.Solve(model)
         return NetworkFlowSolution(self, solver)
 
 
@@ -195,6 +198,12 @@ class NetworkFlowSolution:
         model: NetworkFlowModel,
         solver: cp_model.CpSolver,
     ):
+        """Provides data and network visualization for a NetworkFlowModel solution.
+
+        Args:
+            model (NetworkFlowModel): _description_
+            solver (cp_model.CpSolver): _description_
+        """
         self._solver = solver
         self._model = model
         self._network = None
@@ -203,6 +212,7 @@ class NetworkFlowSolution:
         self._create_demands()
 
     def _create_network(self):
+        """Generate NetworkX graph network from model solution"""
         model = self._model
         sol = self._solver
 
@@ -258,6 +268,7 @@ class NetworkFlowSolution:
         self._network = G
 
     def _create_demands(self):
+        """Generate demand data from model solution"""
         model = self._model
         G = self._network
         rows = []
@@ -276,6 +287,7 @@ class NetworkFlowSolution:
                         else:
                             process_amount = node["amount"]
                         row[prefix + "id"] = X
+                        row[prefix] = node["for_process"]
                         row[prefix + "Cnt"] = node["to_processing_cnt"]
                         row[prefix + "Amount"] = process_amount
                         row[prefix + "Week"] = node["week"]
@@ -285,15 +297,18 @@ class NetworkFlowSolution:
         id_columns = [col for col in demands.columns[::-1] if col.endswith("id")]
         demands = demands.sort_values(id_columns)
 
-        # Current process amounts represent cumulative node steps rather than demand specific
+        # Current process amounts represent cumulative node steps rather than demand specific amounts
+        # In each row, fill all amounts to the left of the minimum amount with the minimum amount
         amount_cols = [col for col in demands.columns if col.endswith("Amount")]
         for n, row in demands.iterrows():
             minimum_amount = row[amount_cols].astype(float).min()
             minimum_arg = row[amount_cols].astype(float).argmin()
             demands.loc[n, amount_cols[:minimum_arg]] = minimum_amount
 
+        # Remove entries on duplicates from branched paths
+        # Branch paths have duplicate process step columns so shifting by one will identify
+        # duplicate processes.
         shifted_mask = demands == demands.shift(1)
-        # Remove entries on duplicates from split paths
         for n in range(len(id_columns), 1, -1):
             columns = [col for col in demands.columns if col.startswith(f"Process{n}")]
             demands.loc[shifted_mask[columns].all(axis=1), columns] = np.NaN
@@ -339,7 +354,7 @@ class NetworkFlowSolution:
         nx.draw_networkx_edges(G, node_positions, width=weight)
         ax.legend(handles=legend_elements)
 
-    def ivisualize(self):
+    def ivisualize(self, ret: bool = False):
         G = self._network
         fig = go.Figure()
 
@@ -428,4 +443,7 @@ class NetworkFlowSolution:
         )
 
         # Display the network graph
-        fig.show()
+        if ret:
+            return fig
+        else:
+            fig.show()
