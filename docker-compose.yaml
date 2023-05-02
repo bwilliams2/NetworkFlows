@@ -1,0 +1,17 @@
+version: '3.9'
+services:
+
+  dashboard:
+    build: 
+      context: ./
+    container_name: networkflow_dashboard
+    hostname: networkflow_dashboard
+    restart: always
+    ports:
+      - 5000:80
+    networks:
+      - network 
+  
+networks:
+  network:
+    driver: bridge

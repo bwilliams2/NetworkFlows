@@ -97,7 +97,13 @@ class NetworkFlowModel:
         current_nodes: list[ProcessStep],
         upstream_nodes: list[ProcessStep],
     ):
-        """Create constraints for upstream process steps"""
+        """Create constraints for upstream process steps
+
+        Args:
+            model (cp_model.CpModel): Model to add constraints to
+            current_nodes (list[ProcessStep]): List of current process steps
+            upstream_nodes (list[ProcessStep]): List of upstream process steps
+        """
         for n, current_node in enumerate(current_nodes):
             node_is_used = current_node.is_used
             contrib_amounts = []
@@ -158,13 +164,12 @@ class NetworkFlowModel:
             model.Add(node.amount >= sum(contrib_amounts))
 
     def solve(self):
-        """Solve the model"""
-        # Find demands
-        processes = defaultdict(list)
+        """Setup and solve network flow model"""
 
+        processes = defaultdict(list)
         model = cp_model.CpModel()
 
-        # Initialize is_used and sort steps into process
+        # Sort steps into process type and initialize is_used
         for step in self._process_steps:
             if step.for_process == self.PROCESS_FLOW[-1]:
                 step.is_used = 1
@@ -180,11 +185,10 @@ class NetworkFlowModel:
             upstream_nodes = processes[self.PROCESS_FLOW[n - 1]]
             self._create_upstream_constraints(model, current_nodes, upstream_nodes)
 
-        # Minimize number of node uses to require simplified network flows
+        # Minimize number of node uses to generate simplified network flows
         num_used = []
         for step in self._process_steps:
             num_used += list(step.is_used_by_node.values())
-
         model.Minimize(sum(num_used))
 
         solver = cp_model.CpSolver()
@@ -226,6 +230,7 @@ class NetworkFlowSolution:
         min_weight = 1.0
         max_weight = 5.0
 
+        # Scale weight based on amount compared to maximum
         def scale_weight(amount):
             return (amount - min_amount) / (max_amount - min_amount) * (
                 max_weight - min_weight
@@ -287,7 +292,7 @@ class NetworkFlowSolution:
                         else:
                             process_amount = node["amount"]
                         row[prefix + "id"] = X
-                        row[prefix] = node["for_process"]
+                        row[prefix[:-1]] = node["for_process"]
                         row[prefix + "Cnt"] = node["to_processing_cnt"]
                         row[prefix + "Amount"] = process_amount
                         row[prefix + "Week"] = node["week"]
@@ -320,6 +325,7 @@ class NetworkFlowSolution:
         return self._demands.copy()
 
     def visualize(self):
+        """Visualize network flow solution using Matplotlib"""
         G = self._network
         colors = sns.color_palette()
         fig, ax = plt.subplots(figsize=(10, 10))
@@ -355,12 +361,18 @@ class NetworkFlowSolution:
         ax.legend(handles=legend_elements)
 
     def ivisualize(self, ret: bool = False):
+        """Visualize the network graph using Plotly
+
+        Args:
+            ret (bool, optional): If True, Plotly Figure is returned. Defaults to False.
+
+        Returns:
+            Figure: Plotly figure
+        """
         G = self._network
         fig = go.Figure()
 
         fig.update_layout(
-            # title="Network Graph",
-            # title_x=0.5,
             hovermode="closest",
             showlegend=False,
             plot_bgcolor="white",
@@ -438,6 +450,7 @@ class NetworkFlowSolution:
                     "Forwarding",
                     "Delivery",
                 ],
+                tickfont=dict(size=20),
             ),
             yaxis=dict(visible=False),
         )

@@ -29,11 +29,24 @@ for k in data.keys():
 
 input_name = "Input2"
 
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}],
+)
+app.title = "Network Flow Solutions"
 
 
 @app.callback(
-    Output("model-solution", "children"),
+    [
+        Output(
+            "model-solution",
+            "style",
+        ),
+        Output("network", "figure"),
+        Output("demands-table", "data"),
+        Output("demands-table", "columns"),
+    ],
     Input("input-select", "label"),
     prevent_initial_call=True,
 )
@@ -41,14 +54,19 @@ def compute_model(label):
     children = []
     model = NetworkFlowModel(data[label])
     sol = model.solve()
-    children.append(dcc.Graph(figure=sol.ivisualize(ret=True), id="network"))
-    children.append(
-        dash_table.DataTable(
-            sol.demands.to_dict("records"),
-            [{"name": i, "id": i} for i in sol.demands.columns],
-        )
-    )
-    return html.Div(children)
+    demands = sol.demands
+    demands = demands.loc[:, ~demands.columns.str.contains("id")]
+    figure = sol.ivisualize(ret=True)
+    figure.update_layout(width=1800)
+    table_data = demands.to_dict("records")
+    columns = [
+        {
+            "name": col.split("_")[1] if "_" in col else col,
+            "id": col,
+        }
+        for col in demands.columns
+    ]
+    return {"display": "block"}, figure, table_data, columns
 
 
 @app.callback(
@@ -69,12 +87,82 @@ def display_output(value, children, ids):
 
 app.layout = html.Div(
     children=[
-        html.H1(children="Network Flow Model"),
+        html.H1(children="Network Flow Model Solutions", style={"textAlign": "center"}),
         html.Div(
             children=[
-                dbc.DropdownMenu(items, id="input-select", label="Select Data"),
+                dbc.Card(
+                    dbc.CardBody(
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    [
+                                        html.H3(
+                                            "Select Input Data:",
+                                            style={
+                                                "marginLeft": "2em",
+                                                "textAlign": "right",
+                                                "marginTop": "2px",
+                                                "display": "inline-block",
+                                                "marginRight": "10px",
+                                            },
+                                        ),
+                                        dbc.DropdownMenu(
+                                            items,
+                                            id="input-select",
+                                            label="Select Data",
+                                            style={
+                                                "display": "inline-block",
+                                                "verticalAlign": "top",
+                                            },
+                                        ),
+                                    ]
+                                ),
+                            ],
+                            justify="center",
+                        ),
+                    ),
+                    style={"margin": "auto", "width": "500px"},
+                ),
                 dcc.Loading(
-                    html.Div(id="model-solution"),
+                    html.Div(
+                        dbc.Card(
+                            dbc.CardBody(
+                                html.Div(
+                                    [
+                                        dcc.Graph(
+                                            id="network", style={"width": "90vw"}
+                                        ),
+                                        html.Div(
+                                            [
+                                                html.Div(
+                                                    html.Hr(
+                                                        style={
+                                                            "borderWidth": "0.3vh",
+                                                            "width": "100%",
+                                                        }
+                                                    )
+                                                ),
+                                                html.H2("Demands", id="demands-header"),
+                                                html.Div(
+                                                    dash_table.DataTable(
+                                                        id="demands-table",
+                                                    ),
+                                                    style={
+                                                        "overflowX": "auto",
+                                                        "maxWidth": "100%",
+                                                    },
+                                                ),
+                                            ],
+                                            style={"margin": "2em"},
+                                        ),
+                                    ],
+                                ),
+                            ),
+                            id="model-solution",
+                            style={"display": "none"},
+                        ),
+                        style={"margin": "2em", "minHeight": "20vh", "margin": "1em"},
+                    ),
                 ),
             ]
         ),
@@ -82,7 +170,8 @@ app.layout = html.Div(
         #     children=[
         #         html.H2("Input Data", id="input-data-header"),
         #         html.Div(id="input-data-table"),
-        #     ]
+        #     ],
+        #     id="input-data-container",
         # ),
         # dash_table.DataTable(
         #     data[input_name].to_dict("records"),
