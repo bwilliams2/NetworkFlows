@@ -49,4 +49,4 @@ A simple web dashboard is also provided to allow users to interact with the mode
 python analysis/app.py
 ```
 
-The dashboard is also hosted on Azure and can be accessed at `http://networkflow.azurewebsites.net/`.
+The dashboard is also hosted on Azure and can be accessed at https://networkflow.azurewebsites.net/.
