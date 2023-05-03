@@ -32,13 +32,13 @@ All model code is contained in `analysis/utils.py`. The model can be executed fo
 python analysis/solution.py
 ```
 
-A `solutions` folder containing a demands csv file and a visualization of the network flow as shown below.
+A `solutions` folder is created that contains a demands csv file and a visualization of the network flow (example below) for each network flow input.
 
 ![Network Flow Visualization](images/Input2.png)
 
 
 ### Model Notebook
-An example notebook `Solution.ipynb` is also provided that shows model setup and execution for each model input.
+An example notebook `Solution.ipynb` is provided that shows model setup and execution for each model input.
 
 
 ## Web Dashboard
