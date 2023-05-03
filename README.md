@@ -1,6 +1,6 @@
 # Network Flow Solutions
 
-This repo contains modeling and visualization solutions for the network flow problems defined in the `NetworkFlowProblem-Data.xslx` file. The solutions are implemented in Python the [OR-Tools](https://developers.google.com/optimization/) package and utilizes the [NetworkX](https://networkx.github.io/) library for path visualization. 
+This repo contains modeling and visualization solutions for the network flow problems defined in the `NetworkFlowProblem-Data.xslx` file. The solutions are implemented in Python using the [OR-Tools](https://developers.google.com/optimization/) package and the [NetworkX](https://networkx.github.io/) library for path visualization. 
 
 ## Model Instructions
 
