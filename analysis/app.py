@@ -1,13 +1,31 @@
 # Run this app with `python app.py` and
 # visit http://127.0.0.1:8050/ in your web browser.
 
-from dash import Dash, html, dcc, dash_table, Input, Output, State, MATCH, ctx, ALL
+from dash import (
+    Dash,
+    html,
+    dcc,
+    dash_table,
+    Input,
+    Output,
+    State,
+    MATCH,
+    ctx,
+    ALL,
+    DiskcacheManager,
+)
+
 import dash_bootstrap_components as dbc
 
 import plotly.express as px
 import pandas as pd
 from utils import NetworkFlowModel
 from pathlib import Path
+
+import diskcache
+
+cache = diskcache.Cache("./cache")
+background_callback_manager = DiskcacheManager(cache)
 
 fpath = Path(__file__).parent.parent.joinpath("data/NetworkFlowProblem-Data.xlsx")
 
@@ -36,6 +54,8 @@ app = Dash(
 )
 app.title = "Network Flow Solutions"
 
+server = app.server
+
 
 @app.callback(
     [
@@ -49,6 +69,8 @@ app.title = "Network Flow Solutions"
     ],
     Input("input-select", "label"),
     prevent_initial_call=True,
+    background=True,
+    manager=background_callback_manager,
 )
 def compute_model(label):
     children = []
@@ -123,6 +145,19 @@ app.layout = html.Div(
                     ),
                     style={"margin": "auto", "width": "500px"},
                 ),
+                html.Div(
+                    html.H3(
+                        "Solving Model...",
+                        id="solving-model",
+                        style={
+                            "margin": "auto",
+                            "marginTop": "2em",
+                            "textAlign": "center",
+                        },
+                    ),
+                    id="solving-model-container",
+                    style={"display": "none"},
+                ),
                 dcc.Loading(
                     html.Div(
                         dbc.Card(
@@ -179,6 +214,7 @@ app.layout = html.Div(
         # ),
     ]
 )
+
 
 if __name__ == "__main__":
     app.run_server(debug=True)

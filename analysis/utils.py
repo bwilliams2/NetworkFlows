@@ -1,6 +1,7 @@
 from functools import reduce
 from dataclasses import dataclass
 import pandas as pd
+import os
 from collections import defaultdict
 from ortools.sat.python import cp_model
 import networkx as nx
@@ -192,6 +193,8 @@ class NetworkFlowModel:
         model.Minimize(sum(num_used))
 
         solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = 120.0
+        solver.parameters.num_search_workers = os.cpu_count() - 1
         solver_status = solver.Solve(model)
         return NetworkFlowSolution(self, solver)
 
@@ -324,11 +327,18 @@ class NetworkFlowSolution:
     def demands(self):
         return self._demands.copy()
 
-    def visualize(self):
-        """Visualize network flow solution using Matplotlib"""
+    def visualize(self, ret=False):
+        """Visualize network flow solution using Matplotlib
+
+        Args:
+            ret (bool, optional): If True, matplotlib Figure is returned. Defaults to False.
+
+        Returns:
+            Figure: matplotlib figure
+        """
         G = self._network
         colors = sns.color_palette()
-        fig, ax = plt.subplots(figsize=(10, 10))
+        fig, ax = plt.subplots(figsize=(11, 7))
 
         legend_elements = []
         process_nodes = {}
@@ -359,6 +369,8 @@ class NetworkFlowSolution:
         weight = [edge["weight"] for edge in G.edges.values()]
         nx.draw_networkx_edges(G, node_positions, width=weight)
         ax.legend(handles=legend_elements)
+        if ret:
+            return fig
 
     def ivisualize(self, ret: bool = False):
         """Visualize the network graph using Plotly

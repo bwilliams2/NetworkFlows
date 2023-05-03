@@ -7,11 +7,16 @@ services:
     container_name: networkflow_dashboard
     hostname: networkflow_dashboard
     restart: always
+    volumes:
+      - vol1:/app/analysis/.cache
     ports:
       - 5000:80
     networks:
       - network 
   
+volumes: 
+   vol1:
+      driver: local
 networks:
   network:
     driver: bridge
